@@ -1,5 +1,5 @@
 CPPFLAGS += --std=gnu++11 -Wall
-all: main
+all: notecxx 
 clean:
-	rm -f main
+	rm -f notecxx
 .PHONY: all clean

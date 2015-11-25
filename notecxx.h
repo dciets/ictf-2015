@@ -38,6 +38,11 @@ struct command
 	char str[7];
 	uint64_t llu;
 	
+	static constexpr size_t string_size = sizeof str + sizeof llu;
+	
+	inline char (&char_storage())[string_size] { return *(char (*)[string_size])&str; }
+	inline const char (&char_storage() const)[string_size] { return *(const char (*)[string_size])&str; }
+	
 	command(print_working_directory_tag);
 	command(make_directory_tag);
 	command(read_file_tag);
@@ -47,6 +52,9 @@ struct command
 	command(print_tag, const std::string& message);
 	
 	void perform() const;
+	
+private:
+	command(command_e op);
 };
 
 int main();

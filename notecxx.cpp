@@ -1,6 +1,7 @@
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <errno.h>
 #include <fcntl.h>
 #include <iostream>
 #include <limits>
@@ -8,7 +9,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "main.h"
+#include "notecxx.h"
 
 using namespace std;
 
@@ -39,19 +40,28 @@ namespace
 		template<size_t N>
 		void read(char (&buffer)[N])
 		{
+			fill(begin(buffer), end(buffer), 0);
 			::read(fd, buffer, N - 1);
-			buffer[N - 1] = 0;
 		}
 		
 		template<size_t N>
 		void write(const char (&buffer)[N])
 		{
-			::write(fd, buffer, N - 1);
+			::write(fd, buffer, strnlen(buffer, N - 1));
 		}
 		
 		void write(const string& str)
 		{
 			::write(fd, str.c_str(), str.size());
+		}
+		
+		[[gnu::format(printf, 2, 3)]]
+		void printf(const char* format, ...)
+		{
+			va_list args;
+			va_start(args, format);
+			vdprintf(fd, format, args);
+			va_end(args);
 		}
 	};
 	
@@ -60,10 +70,10 @@ namespace
 	
 	void analyze_string(const string& input)
 	{
-		char lastChar = 0;
 		size_t ordered = 0;
+		unsigned char lastChar = 0;
 		unsigned counts[256] = {0};
-		for (char c : input)
+		for (unsigned char c : input)
 		{
 			counts[c]++;
 			if (c > lastChar)
@@ -73,7 +83,7 @@ namespace
 			}
 			else
 			{
-				lastChar = numeric_limits<char>::max();
+				lastChar = numeric_limits<unsigned char>::max();
 			}
 		}
 		
@@ -86,50 +96,53 @@ namespace
 			}
 		}
 		
-		char mostCommonChar[] = "the most common character in your input is 'X'.\n";
-		snprintf(mostCommonChar, sizeof mostCommonChar, "the most common character in your input is '%c'.\n", static_cast<char>(maxIndex));
-		safe_fd::out.write(mostCommonChar);
-		
-		char orderedChars[] = "the first 999 characters of the string are in ascending order.\n";
-		snprintf(orderedChars, sizeof orderedChars, "The first %.3zu characters of the string are in ascending order.\n", ordered);
-		safe_fd::out.write(orderedChars);
+		safe_fd::out.printf("the most common character in your input is '%c'\n", static_cast<char>(maxIndex));
+		safe_fd::out.printf("the first %zu characters of the string are in ascending order\n", ordered);
 	}
 	
 	vector<command> commands;
 	char inputBuffer[200];
 }
 
-command::command(print_working_directory_tag) : opcode(print_working_directory)
+command::command(command_e op) : opcode(op)
+{
+	fill(begin(char_storage()), end(char_storage()), 0);
+}
+
+command::command(print_working_directory_tag) : command(print_working_directory)
 {
 }
 
-command::command(make_directory_tag) : opcode(make_directory)
+command::command(make_directory_tag) : command(make_directory)
 {
 }
 
-command::command(read_file_tag) : opcode(read_file)
+command::command(read_file_tag) : command(read_file)
 {
 }
 
-command::command(write_file_tag, uint64_t passcode) : opcode(write_file), llu(passcode)
+command::command(write_file_tag, uint64_t passcode) : command(write_file)
 {
+	llu = passcode;
 }
 
-command::command(authenticate_tag, uint64_t passcode) : opcode(authenticate), llu(passcode)
+command::command(authenticate_tag, uint64_t passcode) : command(authenticate)
 {
+	llu = passcode;
 }
 
-command::command(change_directory_tag, const std::string& dir) : opcode(change_directory)
+command::command(change_directory_tag, const std::string& dir) : command(change_directory)
 {
-	strncpy(str, dir.c_str(), 15);
+	strncpy(char_storage(), dir.c_str(), string_size);
 }
 
-command::command(print_tag, const std::string& message) : opcode(print)
+command::command(print_tag, const std::string& message) : command(print)
 {
-	strncpy(str, message.c_str(), 15);
-	if (message.size() > 14)
+	auto max_size = string_size - 1;
+	strncpy(char_storage(), message.c_str(), max_size);
+	if (message.size() > max_size)
 	{
-		commands.emplace_back(print_tag(), message.substr(14));
+		commands.emplace_back(print_tag(), message.substr(max_size));
 	}
 }
 
@@ -138,8 +151,7 @@ void command::perform() const
 	if (opcode == print_working_directory)
 	{
 		unique_ptr<char, decltype(free)*> wd(getcwd(nullptr, 0), &free);
-		safe_fd::out.write(wd.get());
-		safe_fd::out.write("\n");
+		safe_fd::out.printf("directory is %s\n", wd.get());
 	}
 	else if (opcode == make_directory)
 	{
@@ -151,7 +163,7 @@ void command::perform() const
 	}
 	else if (opcode == change_directory)
 	{
-		const char* directory = str;
+		const char* directory = char_storage();
 		for (; *directory == '.'; directory++);
 		chdir(directory);
 	}
@@ -168,9 +180,9 @@ void command::perform() const
 	}
 	else if (opcode == read_file)
 	{
-		char buffer[200] = {0};
+		char buffer[200];
 		safe_fd("message", O_RDONLY).read(buffer);
-		safe_fd::out.write(string(buffer));
+		safe_fd::out.write(string(buffer, strnlen(buffer, countof(buffer))));
 	}
 	else if (opcode == write_file)
 	{
@@ -179,7 +191,7 @@ void command::perform() const
 	}
 	else if (opcode == print)
 	{
-		safe_fd::out.write(str);
+		safe_fd::out.write(char_storage());
 	}
 }
 
@@ -198,13 +210,17 @@ int main()
 		if (str == "echo")
 		{
 			getline(cin, str);
+			// trim spaces at beginning and end of string
+			str.erase(str.begin(), str.begin() + str.find_first_not_of(" \r\n\t\v"));
+			str.erase(str.begin() + str.find_last_not_of(" \r\n\t\v") + 1, str.end());
+			str.push_back('\n');
 			commands.emplace_back(print_tag(), str);
 		}
 		else if (str == "pwd")
 		{
 			commands.emplace_back(print_working_directory_tag());
 		}
-		else if (str == "chdir")
+		else if (str == "cd")
 		{
 			cin >> str;
 			commands.emplace_back(change_directory_tag(), str);
