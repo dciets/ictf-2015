@@ -182,12 +182,12 @@ void command::perform() const
 	{
 		char buffer[200];
 		safe_fd("message", O_RDONLY).read(buffer);
-		safe_fd::out.write(string(buffer, strnlen(buffer, countof(buffer))));
+		safe_fd::out.write(buffer);
 	}
 	else if (opcode == write_file)
 	{
 		safe_fd("passcode", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(to_string(llu));
-		safe_fd("message", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(string(inputBuffer));
+		safe_fd("message", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(inputBuffer);
 	}
 	else if (opcode == print)
 	{
