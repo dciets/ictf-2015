@@ -133,7 +133,7 @@ command::command(authenticate_tag, uint64_t passcode) : command(authenticate)
 
 command::command(change_directory_tag, const std::string& dir) : command(change_directory)
 {
-	strncpy(char_storage(), dir.c_str(), string_size);
+	strncpy(char_storage(), dir.c_str(), string_size - 1);
 }
 
 command::command(print_tag, const std::string& message) : command(print)
@@ -164,7 +164,7 @@ void command::perform() const
 	else if (opcode == change_directory)
 	{
 		const char* directory = char_storage();
-		for (; *directory == '.'; directory++);
+		for (; *directory == '.' || *directory == '/'; directory++);
 		chdir(directory);
 	}
 	else if (opcode == authenticate)
