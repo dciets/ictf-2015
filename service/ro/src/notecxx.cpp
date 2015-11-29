@@ -201,7 +201,7 @@ int main()
 	safe_fd::in.read(inputBuffer);
 	analyze_string(inputBuffer);
 	
-	commands.reserve(8);
+	commands.reserve(4);
 	safe_fd::out.write("please enter your commands\n");
 	while (cin)
 	{
