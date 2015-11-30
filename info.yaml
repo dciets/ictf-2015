@@ -1,0 +1,6 @@
+architecture: x86_64
+service_name: notecxx
+type: console
+description: A general-purpose, password-protected, filesystem-backed, secure C++ note storage engine.
+flag_id_description: Flags are identified by the directory name.
+apt_dependencies: 

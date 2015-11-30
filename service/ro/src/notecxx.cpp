@@ -182,7 +182,7 @@ void command::perform() const
 	{
 		char buffer[200];
 		safe_fd("message", O_RDONLY).read(buffer);
-		safe_fd::out.write(buffer);
+		safe_fd::out.printf("%s", buffer);
 	}
 	else if (opcode == write_file)
 	{
@@ -191,18 +191,19 @@ void command::perform() const
 	}
 	else if (opcode == print)
 	{
-		safe_fd::out.write(char_storage());
+		safe_fd::out.printf("%s", char_storage());
 	}
 }
 
 int main()
 {
-	safe_fd::out.write("please enter the message that you wish to leave\n");
-	safe_fd::in.read(inputBuffer);
+	setvbuf(stdin, nullptr, _IONBF, 0);
+	safe_fd::out.printf("please enter the message that you wish to leave\n");
+	fgets(inputBuffer, sizeof inputBuffer, stdin);
 	analyze_string(inputBuffer);
 	
 	commands.reserve(4);
-	safe_fd::out.write("please enter your commands\n");
+	safe_fd::out.printf("please enter your commands\n");
 	while (cin)
 	{
 		string str;
