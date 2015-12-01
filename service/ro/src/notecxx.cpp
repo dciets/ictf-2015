@@ -41,18 +41,49 @@ namespace
 		void read(char (&buffer)[N])
 		{
 			fill(begin(buffer), end(buffer), 0);
-			::read(fd, buffer, N - 1);
+			constexpr size_t max_length = N - 1;
+			size_t remaining = max_length;
+			while (remaining > 0)
+			{
+				ssize_t count = ::read(fd, &buffer[max_length - remaining], remaining);
+				if (count > 0)
+				{
+					remaining -= count;
+				}
+				else if (count == 0 || (count < 0 && errno != EINTR))
+				{
+					return;
+				}
+			}
+		}
+		
+		void write(const char* buffer, size_t max_length)
+		{
+			size_t remaining = max_length;
+			while (remaining > 0)
+			{
+				ssize_t count = ::write(fd, &buffer[max_length - remaining], remaining);
+				if (count > 0)
+				{
+					remaining -= count;
+				}
+				else if (count == 0 || (count < 0 && errno != EINTR))
+				{
+					return;
+				}
+			}
 		}
 		
 		template<size_t N>
 		void write(const char (&buffer)[N])
 		{
-			::write(fd, buffer, strnlen(buffer, N - 1));
+			size_t max_length = strnlen(buffer, N - 1);
+			return write(buffer, max_length);
 		}
 		
 		void write(const string& str)
 		{
-			::write(fd, str.c_str(), str.size());
+			return write(str.c_str(), str.size());
 		}
 		
 		[[gnu::format(printf, 2, 3)]]
@@ -71,37 +102,38 @@ namespace
 	void analyze_string(const string& input)
 	{
 		size_t ordered = 0;
-		unsigned char lastChar = 0;
+		unsigned char last_char = 0;
 		unsigned counts[256] = {0};
 		for (unsigned char c : input)
 		{
 			counts[c]++;
-			if (c > lastChar)
+			if (c > last_char)
 			{
 				ordered++;
-				lastChar = c;
+				last_char = c;
 			}
 			else
 			{
-				lastChar = numeric_limits<unsigned char>::max();
+				last_char = numeric_limits<unsigned char>::max();
 			}
 		}
 		
-		size_t maxIndex = 0;
+		size_t max_index = 0;
 		for (size_t i = 0; i < countof(counts); ++i)
 		{
-			if (counts[maxIndex] < counts[i])
+			if (counts[max_index] < counts[i])
 			{
-				maxIndex = i;
+				max_index = i;
 			}
 		}
 		
-		safe_fd::out.printf("the most common character in your input is '%c'\n", static_cast<char>(maxIndex));
+		safe_fd::out.printf("the most common character in your input is '%c'\n", static_cast<char>(max_index));
 		safe_fd::out.printf("the first %zu characters of the string are in ascending order\n", ordered);
 	}
 	
 	vector<command> commands;
-	char inputBuffer[200];
+	char input_buffer[200];
+	const char whitespace[] = " \r\n\t\v";
 }
 
 command::command(command_e op) : opcode(op)
@@ -150,7 +182,7 @@ void command::perform() const
 {
 	if (opcode == print_working_directory)
 	{
-		unique_ptr<char, decltype(free)*> wd(getcwd(nullptr, 0), &free);
+		unique_ptr<char, decltype(free)&> wd(getcwd(nullptr, 0), free);
 		safe_fd::out.printf("directory is %s\n", wd.get());
 	}
 	else if (opcode == make_directory)
@@ -182,28 +214,28 @@ void command::perform() const
 	{
 		char buffer[200];
 		safe_fd("message", O_RDONLY).read(buffer);
-		safe_fd::out.printf("%s", buffer);
+		safe_fd::out.write(buffer);
 	}
 	else if (opcode == write_file)
 	{
 		safe_fd("passcode", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(to_string(llu));
-		safe_fd("message", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(inputBuffer);
+		safe_fd("message", O_CREAT | O_TRUNC | O_WRONLY, 0600).write(input_buffer);
 	}
 	else if (opcode == print)
 	{
-		safe_fd::out.printf("%s", char_storage());
+		safe_fd::out.write(char_storage());
 	}
 }
 
 int main()
 {
 	setvbuf(stdin, nullptr, _IONBF, 0);
-	safe_fd::out.printf("please enter the message that you wish to leave\n");
-	fgets(inputBuffer, sizeof inputBuffer, stdin);
-	analyze_string(inputBuffer);
+	safe_fd::out.write("please enter the message that you wish to leave\n");
+	fgets(input_buffer, sizeof input_buffer, stdin);
+	analyze_string(input_buffer);
 	
 	commands.reserve(4);
-	safe_fd::out.printf("please enter your commands\n");
+	safe_fd::out.write("please enter your commands\n");
 	while (cin)
 	{
 		string str;
@@ -212,8 +244,8 @@ int main()
 		{
 			getline(cin, str);
 			// trim spaces at beginning and end of string
-			str.erase(str.begin(), str.begin() + str.find_first_not_of(" \r\n\t\v"));
-			str.erase(str.begin() + str.find_last_not_of(" \r\n\t\v") + 1, str.end());
+			str.erase(str.begin(), str.begin() + str.find_first_not_of(whitespace));
+			str.erase(str.begin() + str.find_last_not_of(whitespace) + 1, str.end());
 			str.push_back('\n');
 			commands.emplace_back(print_tag(), str);
 		}

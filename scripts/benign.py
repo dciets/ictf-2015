@@ -5,10 +5,9 @@ import sys
 def benign(host, port):
 	i = random.randrange(10)
 	if i < 3:
-		note_type = random.randrange(13)
-		if note_type < 6: note = random_string(int(random.gauss(55, 8)))
-		elif note_type < 9: note = "FLG_" + random_string(16)
-		elif note_type < 12: note = "FLAG{%s}" % random_string(32)
+		note_type = random.randrange(10)
+		if note_type < 2: note = random_string(int(random.gauss(34, 3)))
+		elif note_type < 9: note = "FLG" + random_string(13)
 		else: note = red_herring_note
 		with_conn(host, port, lambda c: store_note(c, note, 2))
 	elif i < 6:
